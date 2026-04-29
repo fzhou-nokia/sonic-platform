@@ -1,4 +1,4 @@
-//  * CPLD driver for Nokia-7220-IXR-H6-128 Router
+//  * PLD driver for Nokia-7220-IXR-H6-128 Router
 //  *
 //  * Copyright (C) 2026 Nokia Corporation.
 //  *
@@ -26,15 +26,15 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 
-#define DRIVER_NAME "sys_cpld"
+#define DRIVER_NAME "mb_pld"
 
 // REGISTERS ADDRESS MAP
 #define VER_MAJOR_REG           0x00
 #define VER_MINOR_REG           0x01
 #define SCRATCH_REG             0x04
-#define SYS_LED_REG2            0x8
-#define SYS_LED_REG3            0x9
 #define OSFP_EFUSE_REG0         0x10
+#define SYS_LED_REG0            0x80
+#define SYS_LED_REG1            0x81
 
 static const unsigned short cpld_address_list[] = {0x71, I2C_CLIENT_END};
 
@@ -110,20 +110,20 @@ static ssize_t set_scratch(struct device *dev, struct device_attribute *devattr,
     return count;
 }
 
-static ssize_t show_led2(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t show_led0(struct device *dev, struct device_attribute *devattr, char *buf)
 {
     struct cpld_data *data = dev_get_drvdata(dev);
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
     u8 val = 0;
     u8 mask = 0xF;
 
-    val = cpld_i2c_read(data, SYS_LED_REG2);
+    val = cpld_i2c_read(data, SYS_LED_REG0);
     if (sda->index == 0) mask = 0xF;
     else mask = 0x3;
     return sprintf(buf, "0x%x\n", (val>>sda->index) & mask);
 }
 
-static ssize_t set_led2(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
+static ssize_t set_led0(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
 {
     struct cpld_data *data = dev_get_drvdata(dev);
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
@@ -142,28 +142,28 @@ static ssize_t set_led2(struct device *dev, struct device_attribute *devattr, co
         return -EINVAL;
     }
     reg_mask = (~(mask << sda->index)) & 0xFF;
-    reg_val = cpld_i2c_read(data, SYS_LED_REG2);
+    reg_val = cpld_i2c_read(data, SYS_LED_REG0);
     reg_val = reg_val & reg_mask;
     usr_val = usr_val << sda->index;
-    cpld_i2c_write(data, SYS_LED_REG2, (reg_val | usr_val));
+    cpld_i2c_write(data, SYS_LED_REG0, (reg_val | usr_val));
 
     return count;
 }
 
-static ssize_t show_led3(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t show_led1(struct device *dev, struct device_attribute *devattr, char *buf)
 {
     struct cpld_data *data = dev_get_drvdata(dev);
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
     u8 val = 0;
     u8 mask = 0xF;
 
-    val = cpld_i2c_read(data, SYS_LED_REG3);
+    val = cpld_i2c_read(data, SYS_LED_REG1);
     if (sda->index == 0) mask = 0xF;
     else mask = 0x3;
     return sprintf(buf, "0x%x\n", (val>>sda->index) & mask);
 }
 
-static ssize_t set_led3(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
+static ssize_t set_led1(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
 {
     struct cpld_data *data = dev_get_drvdata(dev);
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
@@ -182,10 +182,10 @@ static ssize_t set_led3(struct device *dev, struct device_attribute *devattr, co
         return -EINVAL;
     }
     reg_mask = (~(mask << sda->index)) & 0xFF;
-    reg_val = cpld_i2c_read(data, SYS_LED_REG3);
+    reg_val = cpld_i2c_read(data, SYS_LED_REG1);
     reg_val = reg_val & reg_mask;
     usr_val = usr_val << sda->index;
-    cpld_i2c_write(data, SYS_LED_REG3, (reg_val | usr_val));
+    cpld_i2c_write(data, SYS_LED_REG1, (reg_val | usr_val));
 
     return count;
 }
@@ -222,20 +222,20 @@ static ssize_t set_osfp_efuse(struct device *dev, struct device_attribute *devat
 static SENSOR_DEVICE_ATTR(version, S_IRUGO, show_ver, NULL, 0);
 static SENSOR_DEVICE_ATTR(scratch, S_IRUGO | S_IWUSR, show_scratch, set_scratch, 0);
 
-//static SENSOR_DEVICE_ATTR(led_sys, S_IRUGO | S_IWUSR, show_led0, set_led0, 0);
-static SENSOR_DEVICE_ATTR(led_psu, S_IRUGO, show_led3, NULL, 0);
-//static SENSOR_DEVICE_ATTR(led_loc, S_IRUGO | S_IWUSR, show_led2, set_led2, 0);
-static SENSOR_DEVICE_ATTR(led_fan, S_IRUGO | S_IWUSR, show_led2, set_led2, 4);
+static SENSOR_DEVICE_ATTR(led_sys, S_IRUGO | S_IWUSR, show_led0, set_led0, 0);
+static SENSOR_DEVICE_ATTR(led_psu, S_IRUGO, show_led0, NULL, 4);
+static SENSOR_DEVICE_ATTR(led_loc, S_IRUGO | S_IWUSR, show_led1, set_led1, 0);
+static SENSOR_DEVICE_ATTR(led_fan, S_IRUGO | S_IWUSR, show_led1, set_led1, 4);
 
 static SENSOR_DEVICE_ATTR(osfp_efuse, S_IRUGO | S_IWUSR, show_osfp_efuse, set_osfp_efuse, 0);
 
-static struct attribute *sys_cpld_attributes[] = {
+static struct attribute *mb_pld_attributes[] = {
     &sensor_dev_attr_version.dev_attr.attr,
     &sensor_dev_attr_scratch.dev_attr.attr,
 
-    //&sensor_dev_attr_led_sys.dev_attr.attr,
+    &sensor_dev_attr_led_sys.dev_attr.attr,
     &sensor_dev_attr_led_psu.dev_attr.attr,
-    //&sensor_dev_attr_led_loc.dev_attr.attr,
+    &sensor_dev_attr_led_loc.dev_attr.attr,
     &sensor_dev_attr_led_fan.dev_attr.attr,
 
     &sensor_dev_attr_osfp_efuse.dev_attr.attr,
@@ -243,11 +243,11 @@ static struct attribute *sys_cpld_attributes[] = {
     NULL
 };
 
-static const struct attribute_group sys_cpld_group = {
-    .attrs = sys_cpld_attributes,
+static const struct attribute_group mb_pld_group = {
+    .attrs = mb_pld_attributes,
 };
 
-static int sys_cpld_probe(struct i2c_client *client)
+static int mb_pld_probe(struct i2c_client *client)
 {
     int status;
     struct cpld_data *data = NULL;
@@ -258,7 +258,7 @@ static int sys_cpld_probe(struct i2c_client *client)
         goto exit;
     }
 
-    dev_info(&client->dev, "Nokia SYS_CPLD chip found.\n");
+    dev_info(&client->dev, "Nokia MB_PLD chip found.\n");
     data = kzalloc(sizeof(struct cpld_data), GFP_KERNEL);
 
     if (!data) {
@@ -271,10 +271,10 @@ static int sys_cpld_probe(struct i2c_client *client)
     i2c_set_clientdata(client, data);
     mutex_init(&data->update_lock);
 
-    status = sysfs_create_group(&client->dev.kobj, &sys_cpld_group);
+    status = sysfs_create_group(&client->dev.kobj, &mb_pld_group);
     if (status) {
         dev_err(&client->dev, "CPLD INIT ERROR: Cannot create sysfs\n");
-        goto exit;
+        goto exit_sysfs_create_group;
     }
 
     int i;
@@ -283,56 +283,58 @@ static int sys_cpld_probe(struct i2c_client *client)
 
     return 0;
 
+exit_sysfs_create_group:
+    kfree(data);
 exit:
     return status;
 }
 
-static void sys_cpld_remove(struct i2c_client *client)
+static void mb_pld_remove(struct i2c_client *client)
 {
     struct cpld_data *data = i2c_get_clientdata(client);
-    sysfs_remove_group(&client->dev.kobj, &sys_cpld_group);
+    sysfs_remove_group(&client->dev.kobj, &mb_pld_group);
     kfree(data);
 }
 
-static const struct of_device_id sys_cpld_of_ids[] = {
+static const struct of_device_id mb_pld_of_ids[] = {
     {
-        .compatible = "sys_cpld",
+        .compatible = "mb_pld",
         .data       = (void *) 0,
     },
     { },
 };
-MODULE_DEVICE_TABLE(of, sys_cpld_of_ids);
+MODULE_DEVICE_TABLE(of, mb_pld_of_ids);
 
-static const struct i2c_device_id sys_cpld_ids[] = {
+static const struct i2c_device_id mb_pld_ids[] = {
     { DRIVER_NAME, 0 },
     { }
 };
-MODULE_DEVICE_TABLE(i2c, sys_cpld_ids);
+MODULE_DEVICE_TABLE(i2c, mb_pld_ids);
 
-static struct i2c_driver sys_cpld_driver = {
+static struct i2c_driver mb_pld_driver = {
     .driver = {
         .name           = DRIVER_NAME,
-        .of_match_table = of_match_ptr(sys_cpld_of_ids),
+        .of_match_table = of_match_ptr(mb_pld_of_ids),
     },
-    .probe        = sys_cpld_probe,
-    .remove       = sys_cpld_remove,
-    .id_table     = sys_cpld_ids,
+    .probe        = mb_pld_probe,
+    .remove       = mb_pld_remove,
+    .id_table     = mb_pld_ids,
     .address_list = cpld_address_list,
 };
 
-static int __init sys_cpld_init(void)
+static int __init mb_pld_init(void)
 {
-    return i2c_add_driver(&sys_cpld_driver);
+    return i2c_add_driver(&mb_pld_driver);
 }
 
-static void __exit sys_cpld_exit(void)
+static void __exit mb_pld_exit(void)
 {
-    i2c_del_driver(&sys_cpld_driver);
+    i2c_del_driver(&mb_pld_driver);
 }
 
 MODULE_AUTHOR("Nokia");
-MODULE_DESCRIPTION("NOKIA H6-128 SYS_CPLD driver");
+MODULE_DESCRIPTION("NOKIA H6-128 MB_PLD driver");
 MODULE_LICENSE("GPL");
 
-module_init(sys_cpld_init);
-module_exit(sys_cpld_exit);
+module_init(mb_pld_init);
+module_exit(mb_pld_exit);

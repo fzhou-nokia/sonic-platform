@@ -21,22 +21,22 @@ class Thermal(ThermalBase):
     """Nokia platform-specific Thermal class"""
 
     HWMON_DIR = "/sys/bus/i2c/devices/{}/hwmon/hwmon*/"
-    I2C_DEV_LIST = ["143-0048", "154-004b", "154-004c", "154-004d",
-                    "154-0049", "154-0048", "154-004a", "174-0048", "177-0048",
-                    "180-0048", "183-0048", "167-004d","168-004e", "161-004d",
-                    "162-004e", "0-0021", "0-0021"]
+    I2C_DEV_LIST = ["144-0048", "155-004b", "155-004c", "155-004d",
+                    "155-0049", "155-0048", "155-004a", "175-0048", "178-0048",
+                    "181-0048", "184-0048", "168-004d","169-004e", "162-004d",
+                    "163-004e", "0-0021", "0-0021"]
     THERMAL_NAME = ["Carrier Board", "MB Top U34", "MB Top U178", "MB Bottom U196",
                     "MB Bottom U183", "MB Top U3", "MB Top U15", "LDB Left", "LDB Right",
                     "UDB Left", "UDB Right", "Top FCM 1", "Top FCM 2", "Bottom FCM 1",
                     "Bottom FCM 2",  "CPU", "DDR", "Max Port Temp.",  "SSD",
                     "ASIC TH6"]
 
-    THRESHHOLD = [62.0, 75.0, 75.0, 75.0, 
+    THRESHOLD = [62.0, 75.0, 75.0, 75.0, 
                   75.0, 75.0, 75.0, 60.0, 60.0, 
                   60.0, 60.0, 60.0, 60.0, 62.0, 
                   62.0, 95.0, 70.0, 75.0, 70.0, 
                   95.0]
-    CRITICAL_THRESHHOLD = [70.0, 85.0, 85.0, 85.0, 
+    CRITICAL_THRESHOLD = [70.0, 85.0, 85.0, 85.0, 
                            85.0, 85.0, 85.0, 70.0, 70.0, 
                            70.0, 70.0, 70.0, 70.0, 72.0, 
                            72.0, 99.0, 80.0, 77.0, 80.0, 
@@ -55,7 +55,9 @@ class Thermal(ThermalBase):
         self.thermal_temperature_file = None
 
         if self.index == THERMAL_NUM - 1: #SSD
-            self.thermal_temperature_file = "/sys/class/hwmon/hwmon1/temp1_input"
+            self.device_path = glob.glob("/sys/class/nvme/nvme0/hwmon*/")
+            if len(self.device_path) > 0:
+                self.thermal_temperature_file = self.device_path[0] + "temp1_input"
         elif self.index == THERMAL_NUM - 2:
             self.sfps = sfps
         elif self.index == THERMAL_NUM - 3:
@@ -168,9 +170,9 @@ class Thermal(ThermalBase):
             Celsius up to nearest thousandth of one degree Celsius,
             e.g. 30.125
         """
-        return self.THRESHHOLD[self.index-1]
+        return self.THRESHOLD[self.index-1]
 
-    def set_high_threshold(self, _temperature):
+    def set_high_threshold(self, temperature):
         """
         Sets the high threshold temperature of thermal
 
@@ -192,9 +194,9 @@ class Thermal(ThermalBase):
             A float number, the high critical threshold temperature of thermal in Celsius
             up to nearest thousandth of one degree Celsius, e.g. 30.125
         """
-        return self.CRITICAL_THRESHHOLD[self.index - 1]
+        return self.CRITICAL_THRESHOLD[self.index - 1]
 
-    def set_high_critical_threshold(self):
+    def set_high_critical_threshold(self, temperature):
         """
         Sets the high_critical threshold temperature of thermal
 
@@ -217,7 +219,7 @@ class Thermal(ThermalBase):
         """
         return 0.0
 
-    def set_low_threshold(self, _temperature):
+    def set_low_threshold(self, temperature):
         """
         Sets the low threshold temperature of thermal
 

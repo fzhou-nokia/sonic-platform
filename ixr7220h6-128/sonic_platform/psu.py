@@ -15,9 +15,10 @@ except ImportError as e:
 
 PSU_NUM = 4
 REG_DIR  = "/sys/bus/i2c/devices/1-0060/"
+LED_REG_DIR  = "/sys/bus/i2c/devices/135-0071/"
 MAX_VOLTAGE = 264
 MIN_VOLTAGE = 180
-I2C_BUS = [136, 137, 138, 139]
+I2C_BUS = [137, 138, 139, 140]
 PSU_ADDR = ["58", "59", "5a", "5b"]
 EEPROM_ADDR = ['50', '51', '52', '53']
 
@@ -264,7 +265,7 @@ class Psu(PsuBase):
         Returns:
             A string, one of the predefined STATUS_LED_COLOR_* strings.
         """
-        result = read_sysfs_file(REG_DIR+"led_psu")
+        result = read_sysfs_file(LED_REG_DIR+"led_psu")
         if result == '1':
             return 'green'
         else:

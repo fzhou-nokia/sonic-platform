@@ -1,4 +1,4 @@
-""""
+"""
     listen for the SFP change event and return to chassis.
 """
 
@@ -17,10 +17,10 @@ SYSTEM_FAIL = 'system_fail'
 
 # SFP PORT numbers
 PORT_START = 1
-PORT_END = 130
+PORT_END = 129
 
 SYSFS_DIR = "/sys/bus/i2c/devices/{}/"
-PORTPLD_ADDR = ["152-0076", "153-0076", "148-0074", "149-0075", "150-0073", "151-0073"]
+PORTPLD_ADDR = ["153-0076", "154-0076", "149-0074", "150-0075", "151-0073", "152-0073"]
 
 _BOOL_LOOKUP_LSB = [tuple((i >> s) & 1 for s in range(8)) for i in range(256)]
 _BOOL_TABLE_A = [((i >> 0) & 1, (i >> 1) & 1, (i >> 4) & 1, (i >> 5) & 1)
@@ -38,15 +38,10 @@ class SfpEvent:
         self.handle = None
         self.modprs_list = []
 
-
     def initialize(self):
         # Get Transceiver status
         time.sleep(5)
         self.modprs_list = self._get_transceiver_status()
-        if self.modprs_list[PORT_END-2]:
-            write_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+"port_33_tx_en", '0')
-        if self.modprs_list[PORT_END-1]:
-            write_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+"port_34_tx_en", '0')
 
     def deinitialize(self):
         if self.handle is None:
@@ -70,12 +65,11 @@ class SfpEvent:
         port_status.extend(self._reorder(reg_value[4:12]))
         port_status.extend([bit for h in reg_value[-4:] for bit in lookup[int(h, 16)]])
 
-        for i in range (33, 35):
-            status = read_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+f"port_{i}_prs")
-            if status == '0':
-                port_status.append(0)
-            else:
-                port_status.append(1)
+        status = read_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+f"port_33_prs")
+        if status == '0':
+            port_status.append(0)
+        else:
+            port_status.append(1)
 
         return port_status
 
@@ -108,12 +102,6 @@ class SfpEvent:
                             port_change[i+1] = '1'
                         else:
                             port_change[i+1] = '0'
-
-                        if (i == PORT_END -2) or (i == PORT_END -1):
-                            if port_status[i] == 0:
-                                write_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+f"port_{i-95}_tx_en", '0')
-                            else:
-                                write_sysfs_file(SYSFS_DIR.format(PORTPLD_ADDR[3])+f"port_{i-95}_tx_en", '1')
 
                 # Update reg value
                 self.modprs_list = port_status

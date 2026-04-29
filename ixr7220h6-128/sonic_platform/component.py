@@ -9,78 +9,59 @@
 try:
     import os
     import subprocess
-    import ntpath
     import time
     import glob
     from sonic_platform_base.component_base import ComponentBase
     from sonic_platform.sysfs import read_sysfs_file, write_sysfs_file
 except ImportError as e:
-    raise ImportError(str(e) + "- required module not found")
+    raise ImportError(str(e) + "- required module not found") from e
 
 SYSFS_DIR = ["/sys/class/dmi/id/",
              "/sys/bus/i2c/devices/1-0060/",
-             "/sys/bus/i2c/devices/134-0071/",
-             "/sys/bus/i2c/devices/148-0074/",
-             "/sys/bus/i2c/devices/149-0075/",
-             "/sys/bus/i2c/devices/152-0076/",
+             "/sys/bus/i2c/devices/135-0071/",
+             "/sys/bus/i2c/devices/149-0074/",
+             "/sys/bus/i2c/devices/150-0075/",
              "/sys/bus/i2c/devices/153-0076/",
-             "/sys/bus/i2c/devices/150-0073/",
+             "/sys/bus/i2c/devices/154-0076/",
              "/sys/bus/i2c/devices/151-0073/",
-             "/sys/bus/i2c/devices/144-0032/hwmon/hwmon*/",
-             "/sys/bus/i2c/devices/145-0033/hwmon/hwmon*/"]
+             "/sys/bus/i2c/devices/152-0073/",
+             "/sys/bus/i2c/devices/145-0032/hwmon/hwmon*/",
+             "/sys/bus/i2c/devices/146-0033/hwmon/hwmon*/"]
 
 class Component(ComponentBase):
     """Nokia platform-specific Component class"""
 
     CHASSIS_COMPONENTS = [
         ["BIOS", "Basic Input/Output System"],
-        ["SYS_FPGA", "Used for managing CPU board"],
-        ["SYS_CPLD", "Used for managing BCM chip, PSUs and LEDs"],
-        ["PORT_CPLD0", "Used for managing PORT 33-48, 65-80"],
-        ["PORT_CPLD1", "Used for managing PORT 49-64, 81-96, SFP28"],
-        ["PORT_CPLD_TL", "Used for managing PORT 1-16"],
-        ["PORT_CPLD_TR", "Used for managing PORT 17-32"],
-        ["PORT_CPLD_BL", "Used for managing PORT 97-112"],
-        ["PORT_CPLD_BR", "Used for managing PORT 113-128"],
+        ["CB_FPGA", "Used for managing CPU board"],
+        ["MB_FPGA", "Used for managing BCM chip, PSUs and LEDs"],
+        ["MB_PORT_FPGA_0", "Used for managing PORT 33-48, 65-80"],
+        ["MB_PORT_FPGA_1", "Used for managing PORT 49-64, 81-96, 129"],
+        ["UDB_LPORT_FPGA", "Used for managing PORT 1-16"],
+        ["UDB_RPORT_FPGA", "Used for managing PORT 17-32"],
+        ["LDB_LPORT_FPGA", "Used for managing PORT 97-112"],
+        ["LDB_RPORT_FPGA", "Used for managing PORT 113-128"],
         ["FCM0_CPLD", "Used for managing upper fan drawers"],
         ["FCM1_CPLD", "Used for managing lower fan drawers"] ]
-    DEV_NAME = [" ", " ", "MAIN_CPLD", "MAIN_CPLD", "MAIN_CPLD", "MAIN_CPLD", 
-                "MAIN_CPLD", "MAIN_CPLD","MAIN_CPLD", "FAN0_CPLD", "FAN1_CPLD"]
-    TFR_NAME = [" ", " ", "h6_64_sys_cpld_tfr.vme", "h6_64_port_cpld0_tfr.vme",
-                "h6_64_port_cpld1_tfr.vme", "h6_64_port_cpld_tl_tfr.vme", 
-                "h6_64_port_cpld_tr_tfr.vme", "h6_64_port_cpld_bl_tfr.vme",
-                "h6_64_port_cpld_br_tfr.vme", "h6_64_fan_cpld_tfr.vme", 
-                "h6_64_fan_cpld_tfr.vme"]
+    DEV_NAME = ["", "", "MAIN_FPGA", "MAIN_FPGA", "MAIN_FPGA", "MAIN_FPGA", 
+                "MAIN_FPGA", "MAIN_FPGA", "MAIN_FPGA", "FAN0_CPLD", "FAN1_CPLD"]
 
-    BIOS_UPDATE_COMMAND = ['./afulnx_64', '', '/B', '/P', '/N', '/K']
-    FPGA_CHECK_COMMAND = ['./fpga_spi_flash.sh', '-rid']
-    FPGA_UPDATE_COMMAND = ['./fpga_spi_flash.sh', '-upd', '', '-all']
-    CPLD_CHECK_COMMAND = ['./cpldupd', '-s', '']
-    CPLD_UPDATE_COMMAND = ['./cpldupd', '-u', '', '']
+    BIOS_UPDATE_COMMAND = ('./afulnx_64', '/B', '/P', '/N', '/K')
+    FPGA_CHECK_COMMAND = ('./fpga_spi_flash.sh', '-rid')
+    FPGA_UPDATE_COMMAND = ('./fpga_spi_flash.sh', '-upd', '-all')
+    CPLD_CHECK_COMMAND = ('./cpldupd', '-s')
+    CPLD_UPDATE_COMMAND = ('./cpldupd', '-u')
 
     def __init__(self, component_index):
         self.index = component_index
         self.name = self.CHASSIS_COMPONENTS[self.index][0]
         self.description = self.CHASSIS_COMPONENTS[self.index][1]
-        if self.name == "FCM0_CPLD" or self.name == "FCM1_CPLD":
+        if self.name in ("FCM0_CPLD", "FCM1_CPLD"):
             hwmon_dir = glob.glob(SYSFS_DIR[self.index])
             self.sysfs_dir = hwmon_dir[0]
         else:
             self.sysfs_dir = SYSFS_DIR[self.index]
         self.dev_name = self.DEV_NAME[self.index]
-        self.tfr_name = self.TFR_NAME[self.index]
-
-    def _get_command_result(self, cmdline):
-        try:
-            proc = subprocess.Popen(cmdline.split(), stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT)
-            stdout = proc.communicate()[0]
-            proc.wait()
-            result = stdout.rstrip('\n')
-        except OSError:
-            result = None
-
-        return result
 
     def get_name(self):
         """
@@ -171,10 +152,10 @@ class Component(ComponentBase):
         Returns:
             A boolean, True if install was successful, False if not
         """
-        image_name = ntpath.basename(image_path)
+        image_name = os.path.basename(image_path)
+        image_full_path = os.path.join("/tmp", image_name)
 
-        os.chdir("/tmp")
-        if not os.path.isfile(image_name):
+        if not os.path.isfile(image_full_path):
             print(f"ERROR: the image {image_name} doesn't exist in /tmp")
             return False
 
@@ -182,70 +163,66 @@ class Component(ComponentBase):
             if not os.path.isfile('/tmp/afulnx_64'):
                 print("ERROR: the BIOS upgrade tool /tmp/afulnx_64 doesn't exist ")
                 return False
-            self.BIOS_UPDATE_COMMAND[1] = image_name
+            os.chmod('/tmp/afulnx_64', 0o755)
+            cmd = [self.BIOS_UPDATE_COMMAND[0], image_full_path, *self.BIOS_UPDATE_COMMAND[1:]]
             try:
-                subprocess.run(self.BIOS_UPDATE_COMMAND, stderr=subprocess.STDOUT)
+                subprocess.run(cmd, stderr=subprocess.STDOUT, check=True, cwd="/tmp")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to upgrade BIOS: rc={e.returncode}")
                 return False
             print("\nBIOS update has ended\n")
-        
-        elif self.name == "SYS_FPGA":
+
+        elif self.name == "CB_FPGA":
             if not os.path.isfile('/tmp/fpga_spi_flash.sh'):
                 print("ERROR: the fpga upgrade tool /tmp/fpga_spi_flash.sh doesn't exist ")
                 return False
             if not os.path.isfile('/tmp/fpga_upd2'):
                 print("ERROR: the fpga upgrade tool /tmp/fpga_upd2 doesn't exist ")
                 return False
+            os.chmod('/tmp/fpga_spi_flash.sh', 0o755)
+            os.chmod('/tmp/fpga_upd2', 0o755)
+            check_cmd = list(self.FPGA_CHECK_COMMAND)
             try:
-                result = subprocess.check_output(self.FPGA_CHECK_COMMAND)
-                result = subprocess.check_output(self.FPGA_CHECK_COMMAND)
+                subprocess.run(check_cmd, cwd="/tmp")
+                result = subprocess.check_output(check_cmd, cwd="/tmp")
                 text = result.decode('utf-8')
                 print(text)
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to check SYS_FPGA RDID: rc={e.returncode}")
+                return False
             last = text.splitlines()
             if last[-1].strip() != "RDID: c2 20 18":
                 print("FPGA RDID check failed!")
                 return False
-            self.FPGA_UPDATE_COMMAND[2] = image_name
+            update_cmd = [self.FPGA_UPDATE_COMMAND[0], self.FPGA_UPDATE_COMMAND[1], image_full_path, self.FPGA_UPDATE_COMMAND[2]]
             try:
-                subprocess.run(self.FPGA_UPDATE_COMMAND, stderr=subprocess.STDOUT)
+                subprocess.run(update_cmd, stderr=subprocess.STDOUT, check=True, cwd="/tmp")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to upgrade SYS_FPGA: rc={e.returncode}")
                 return False
-            print("\nSYS_FPGA firmware update has ended\n")
-            print("!!!The system will power cycle in 10 sec!!!")
-            time.sleep(7)
-            self._power_cycle()
+            print("\nCB_FPGA firmware update has ended\n")
 
         else:
             if not os.path.isfile('/tmp/cpldupd'):
                 print("ERROR: the cpld upgrade tool /tmp/cpldupd doesn't exist ")
                 return False
-            self.CPLD_CHECK_COMMAND[2] = self.dev_name
+            os.chmod('/tmp/cpldupd', 0o755)
+            check_cmd = [*self.CPLD_CHECK_COMMAND, self.dev_name]
             try:
-                subprocess.run(self.CPLD_CHECK_COMMAND, stderr=subprocess.STDOUT)
+                subprocess.run(check_cmd, stderr=subprocess.STDOUT, check=True, cwd="/tmp")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to Scan Jtag chain for {self.name}: rc={e.returncode}")
                 return False
-            self.CPLD_UPDATE_COMMAND[2] = self.dev_name
-            self.CPLD_UPDATE_COMMAND[3] = image_name
+            update_cmd = [*self.CPLD_UPDATE_COMMAND, self.dev_name, image_full_path]
             try:
-                subprocess.run(self.CPLD_UPDATE_COMMAND, stderr=subprocess.STDOUT)
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to upgrade {self.name}: rc={e.returncode}")
-                return False
-            self.CPLD_UPDATE_COMMAND[3] = self.tfr_name
-            try:
-                subprocess.run(self.CPLD_UPDATE_COMMAND, stderr=subprocess.STDOUT)
+                subprocess.run(update_cmd, stderr=subprocess.STDOUT, check=True, cwd="/tmp")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to upgrade {self.name}: rc={e.returncode}")
                 return False
             print(f"\n{self.name} firmware update has ended\n")
-        
+
         return True
-     
+
     def update_firmware(self, image_path):
         """
         Updates firmware of the component
@@ -279,16 +256,8 @@ class Component(ComponentBase):
             A string containing the available firmware version of the component
         """
         if image_path:    
-            image_name = ntpath.basename(image_path)
+            image_name = os.path.basename(image_path)
             return image_name
 
         return 'NA'
-    
-    def _power_cycle(self):
-        os.system('sync')
-        os.system('sync')
-        time.sleep(3)
-        for i in range(4):
-            file_path = f"/sys/bus/i2c/devices/{i+136}-00{hex(0x58+i)[2:]}/psu_rst"
-            if os.path.exists(file_path):
-                write_sysfs_file(file_path, "Reset\n")
+   

@@ -95,8 +95,8 @@ class WatchdogImplBase(WatchdogBase):
         Get watchdog timeout
         @return watchdog timeout
         """
-        timeout=0
-        timeout=read_sysfs_file(self.wd_timeout_reg)
+        timeout = 0
+        timeout = int(read_sysfs_file(self.wd_timeout_reg))
 
         return timeout
 

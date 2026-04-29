@@ -17,9 +17,9 @@ except ImportError as e:
 
 FANS_PER_DRAWER = 2
 HWMON_DIR = "/sys/bus/i2c/devices/{}/hwmon/hwmon*/"
-I2C_DEV_LIST = ["144-0032", "145-0033"]
-EEPROM_ADDR = ['163', '169', '164', '170',
-               '165', '171', '166', '172']
+I2C_DEV_LIST = ["145-0032", "146-0033"]
+EEPROM_ADDR = ['164', '170', '165', '171',
+               '166', '172', '167', '173']
 sonic_logger = logger.Logger('fan_drawer')
 
 class NokiaFanDrawer(FanDrawerBase):
@@ -32,7 +32,7 @@ class NokiaFanDrawer(FanDrawerBase):
         self.fan_led_color = ['off', 'green', 'amber', 'green_blink']
 
         self.fan_direction_intake = "intake"
-        i2c_dev = I2C_DEV_LIST[self._index%2]
+        i2c_dev = I2C_DEV_LIST[(self._index-1)%2]
         hwmon_path = glob.glob(HWMON_DIR.format(i2c_dev))
         self.get_fan_presence_reg = hwmon_path[0] + f"fan{(index//2)+1}_present"
         self.fan_led_reg = hwmon_path[0] + f"fan{(index//2)+1}_led"
@@ -83,7 +83,7 @@ class NokiaFanDrawer(FanDrawerBase):
         """
         Retrieves the serial number of the Fan Drawer
         Returns:
-            string: Serial number of Fan
+            string: Serial number of the Fan Drawer
         """
         if not self.get_presence():
             return 'N/A'
@@ -94,7 +94,7 @@ class NokiaFanDrawer(FanDrawerBase):
         Retrieves the part number of the Fan Drawer
 
         Returns:
-            string: Part number of Fan
+            string: Part number of the Fan Drawer
         """
         if not self.get_presence():
             return 'N/A'
@@ -105,7 +105,7 @@ class NokiaFanDrawer(FanDrawerBase):
         Retrieves the servicetag number of the Fan Drawer
 
         Returns:
-            string: servicetag number of Fan
+            string: servicetag number of the Fan Drawer
         """
         if not self.get_presence():
             return 'N/A'
@@ -113,10 +113,10 @@ class NokiaFanDrawer(FanDrawerBase):
 
     def get_manuf_date(self):
         """
-        Retrieves the servicetag number of the Fan Drawer
+        Retrieves the manufacturing date of the Fan Drawer
 
         Returns:
-            string: servicetag number of Fan
+            string: manufacturing date of the Fan Drawer
         """
         if not self.get_presence():
             return 'N/A'

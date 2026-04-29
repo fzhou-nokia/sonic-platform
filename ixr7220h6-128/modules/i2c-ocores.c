@@ -25,9 +25,8 @@
 #include <linux/log2.h>
 #include <linux/spinlock.h>
 #include <linux/jiffies.h>
-#include <linux/mutex.h>
 
-#define OCORE_DRIVER_VERSION "2.0.0"
+#define OCORE_DRIVER_VERSION "5.0.0-ChipSel"
 
 enum _print_level {PL_ERR, PL_WARN, PL_INFO, PL_DEBUG};
 
@@ -35,178 +34,10 @@ static uint param_verbose = PL_WARN;
 module_param(param_verbose, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(param_verbose, "Print more information for debugging. It can be 0,1 2, or 3.");
 
-static uint param_timeout = 1;
+//static uint param_timeout = 1;
+static uint param_timeout = 2;
 module_param(param_timeout, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(param_timeout, "for debugging. 1 ms should be enough");
-
-// spi mux mapping table
-// ex : arr_spi_mux [0] = port 1 = dev_id 0 = spi mux 0x04
-// ex : arr_spi_mux [32] = port 33 = dev_id 32 = spi mux 0x0
-static uint8_t arr_spi_mux[] = {
-    // top part 64 port
-    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
-    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-
-    // bottom part 64 port
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-    0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-    0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
-    0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
-
-    // SFP
-    0x01, 0x01
-};
-
-#define PORT_NUM  (128 + 2)  /*128 OSFPs + 2 SFP28s*/
-static const uint arr_pcie_offset[PORT_NUM]= {
-    0x2100,// MESS_TOP_L_CPLD I2C Master OSFP Port1
-    0x2120,// MESS_TOP_L_CPLD I2C Master OSFP Port2
-    0x2140,// MESS_TOP_L_CPLD I2C Master OSFP Port3
-    0x2160,// MESS_TOP_L_CPLD I2C Master OSFP Port4
-    0x2180,// MESS_TOP_L_CPLD I2C Master OSFP Port5
-    0x21A0,// MESS_TOP_L_CPLD I2C Master OSFP Port6
-    0x21C0,// MESS_TOP_L_CPLD I2C Master OSFP Port7
-    0x21E0,// MESS_TOP_L_CPLD I2C Master OSFP Port8
-    0x2200,// MESS_TOP_L_CPLD I2C Master OSFP Port9
-    0x2220,// MESS_TOP_L_CPLD I2C Master OSFP Port10
-    0x2240,// MESS_TOP_L_CPLD I2C Master OSFP Port11
-    0x2260,// MESS_TOP_L_CPLD I2C Master OSFP Port12
-    0x2280,// MESS_TOP_L_CPLD I2C Master OSFP Port13
-    0x22A0,// MESS_TOP_L_CPLD I2C Master OSFP Port14
-    0x22C0,// MESS_TOP_L_CPLD I2C Master OSFP Port15
-    0x22E0,// MESS_TOP_L_CPLD I2C Master OSFP Port16
-    0x2100,// MESS_TOP_R_CPLD I2C Master OSFP Port17
-    0x2120,// MESS_TOP_R_CPLD I2C Master OSFP Port18
-    0x2140,// MESS_TOP_R_CPLD I2C Master OSFP Port19
-    0x2160,// MESS_TOP_R_CPLD I2C Master OSFP Port20
-    0x2180,// MESS_TOP_R_CPLD I2C Master OSFP Port21
-    0x21A0,// MESS_TOP_R_CPLD I2C Master OSFP Port22
-    0x21C0,// MESS_TOP_R_CPLD I2C Master OSFP Port23
-    0x21E0,// MESS_TOP_R_CPLD I2C Master OSFP Port24
-    0x2200,// MESS_TOP_R_CPLD I2C Master OSFP Port25
-    0x2220,// MESS_TOP_R_CPLD I2C Master OSFP Port26
-    0x2240,// MESS_TOP_R_CPLD I2C Master OSFP Port27
-    0x2260,// MESS_TOP_R_CPLD I2C Master OSFP Port28
-    0x2280,// MESS_TOP_R_CPLD I2C Master OSFP Port29
-    0x22A0,// MESS_TOP_R_CPLD I2C Master OSFP Port30
-    0x22C0,// MESS_TOP_R_CPLD I2C Master OSFP Port31
-    0x22E0,// MESS_TOP_R_CPLD I2C Master OSFP Port32
-//////////////////////////////////////////////////////
-    0x2100,// PORTCPLD0 I2C Master OSFP Port33
-    0x2120,// PORTCPLD0 I2C Master OSFP Port34
-    0x2180,// PORTCPLD0 I2C Master OSFP Port35
-    0x21A0,// PORTCPLD0 I2C Master OSFP Port36
-    0x2200,// PORTCPLD0 I2C Master OSFP Port37
-    0x2220,// PORTCPLD0 I2C Master OSFP Port38
-    0x2280,// PORTCPLD0 I2C Master OSFP Port39
-    0x22A0,// PORTCPLD0 I2C Master OSFP Port40
-    0x2300,// PORTCPLD0 I2C Master OSFP Port41
-    0x2320,// PORTCPLD0 I2C Master OSFP Port42
-    0x2380,// PORTCPLD0 I2C Master OSFP Port43
-    0x23A0,// PORTCPLD0 I2C Master OSFP Port44
-    0x2400,// PORTCPLD0 I2C Master OSFP Port45
-    0x2420,// PORTCPLD0 I2C Master OSFP Port46
-    0x2480,// PORTCPLD0 I2C Master OSFP Port47
-    0x24A0,// PORTCPLD0 I2C Master OSFP Port48
-    0x2100,// PORTCPLD1 I2C Master OSFP Port49
-    0x2120,// PORTCPLD1 I2C Master OSFP Port50
-    0x2180,// PORTCPLD1 I2C Master OSFP Port51
-    0x21A0,// PORTCPLD1 I2C Master OSFP Port52
-    0x2200,// PORTCPLD1 I2C Master OSFP Port53
-    0x2220,// PORTCPLD1 I2C Master OSFP Port54
-    0x2280,// PORTCPLD1 I2C Master OSFP Port55
-    0x22A0,// PORTCPLD1 I2C Master OSFP Port56
-    0x2300,// PORTCPLD1 I2C Master OSFP Port57
-    0x2320,// PORTCPLD1 I2C Master OSFP Port58
-    0x2380,// PORTCPLD1 I2C Master OSFP Port59
-    0x23A0,// PORTCPLD1 I2C Master OSFP Port60
-    0x2400,// PORTCPLD1 I2C Master OSFP Port61
-    0x2420,// PORTCPLD1 I2C Master OSFP Port62
-    0x2480,// PORTCPLD1 I2C Master OSFP Port63
-    0x24A0,// PORTCPLD1 I2C Master OSFP Port64
-//////////////////////////////////////////////////////
-    0x2140,// PORTCPLD0 I2C Master OSFP Port65
-    0x2160,// PORTCPLD0 I2C Master OSFP Port66
-    0x21C0,// PORTCPLD0 I2C Master OSFP Port67
-    0x21E0,// PORTCPLD0 I2C Master OSFP Port68
-    0x2240,// PORTCPLD0 I2C Master OSFP Port69
-    0x2260,// PORTCPLD0 I2C Master OSFP Port70
-    0x22C0,// PORTCPLD0 I2C Master OSFP Port71
-    0x22E0,// PORTCPLD0 I2C Master OSFP Port72
-    0x2340,// PORTCPLD0 I2C Master OSFP Port73
-    0x2360,// PORTCPLD0 I2C Master OSFP Port74
-    0x23C0,// PORTCPLD0 I2C Master OSFP Port75
-    0x23E0,// PORTCPLD0 I2C Master OSFP Port76
-    0x2440,// PORTCPLD0 I2C Master OSFP Port77
-    0x2460,// PORTCPLD0 I2C Master OSFP Port78
-    0x24C0,// PORTCPLD0 I2C Master OSFP Port79
-    0x24E0,// PORTCPLD0 I2C Master OSFP Port80
-    0x2140,// PORTCPLD1 I2C Master OSFP Port81
-    0x2160,// PORTCPLD1 I2C Master OSFP Port82
-    0x21C0,// PORTCPLD1 I2C Master OSFP Port83
-    0x21E0,// PORTCPLD1 I2C Master OSFP Port84
-    0x2240,// PORTCPLD1 I2C Master OSFP Port85
-    0x2260,// PORTCPLD1 I2C Master OSFP Port86
-    0x22C0,// PORTCPLD1 I2C Master OSFP Port87
-    0x22E0,// PORTCPLD1 I2C Master OSFP Port88
-    0x2340,// PORTCPLD1 I2C Master OSFP Port89
-    0x2360,// PORTCPLD1 I2C Master OSFP Port90
-    0x23C0,// PORTCPLD1 I2C Master OSFP Port91
-    0x23E0,// PORTCPLD1 I2C Master OSFP Port92
-    0x2440,// PORTCPLD1 I2C Master OSFP Port93
-    0x2460,// PORTCPLD1 I2C Master OSFP Port94
-    0x24C0,// PORTCPLD1 I2C Master OSFP Port95
-    0x24E0,// PORTCPLD1 I2C Master OSFP Port96
-//////////////////////////////////////////////////////
-    0x2100,// MESS_BOT_L_CPLD I2C Master OSFP Port97
-    0x2120,// MESS_BOT_L_CPLD I2C Master OSFP Port98
-    0x2140,// MESS_BOT_L_CPLD I2C Master OSFP Port99
-    0x2160,// MESS_BOT_L_CPLD I2C Master OSFP Port100
-    0x2180,// MESS_BOT_L_CPLD I2C Master OSFP Port101
-    0x21A0,// MESS_BOT_L_CPLD I2C Master OSFP Port102
-    0x21C0,// MESS_BOT_L_CPLD I2C Master OSFP Port103
-    0x21E0,// MESS_BOT_L_CPLD I2C Master OSFP Port104
-    0x2200,// MESS_BOT_L_CPLD I2C Master OSFP Port105
-    0x2220,// MESS_BOT_L_CPLD I2C Master OSFP Port106
-    0x2240,// MESS_BOT_L_CPLD I2C Master OSFP Port107
-    0x2260,// MESS_BOT_L_CPLD I2C Master OSFP Port108
-    0x2280,// MESS_BOT_L_CPLD I2C Master OSFP Port109
-    0x22A0,// MESS_BOT_L_CPLD I2C Master OSFP Port110
-    0x22C0,// MESS_BOT_L_CPLD I2C Master OSFP Port111
-    0x22E0,// MESS_BOT_L_CPLD I2C Master OSFP Port112
-    0x2100,// MESS_BOT_R_CPLD I2C Master OSFP Port113
-    0x2120,// MESS_BOT_R_CPLD I2C Master OSFP Port114
-    0x2140,// MESS_BOT_R_CPLD I2C Master OSFP Port115
-    0x2160,// MESS_BOT_R_CPLD I2C Master OSFP Port116
-    0x2180,// MESS_BOT_R_CPLD I2C Master OSFP Port117
-    0x21A0,// MESS_BOT_R_CPLD I2C Master OSFP Port118
-    0x21C0,// MESS_BOT_R_CPLD I2C Master OSFP Port119
-    0x21E0,// MESS_BOT_R_CPLD I2C Master OSFP Port120
-    0x2200,// MESS_BOT_R_CPLD I2C Master OSFP Port121
-    0x2220,// MESS_BOT_R_CPLD I2C Master OSFP Port122
-    0x2240,// MESS_BOT_R_CPLD I2C Master OSFP Port123
-    0x2260,// MESS_BOT_R_CPLD I2C Master OSFP Port124
-    0x2280,// MESS_BOT_R_CPLD I2C Master OSFP Port125
-    0x22A0,// MESS_BOT_R_CPLD I2C Master OSFP Port126
-    0x22C0,// MESS_BOT_R_CPLD I2C Master OSFP Port127
-    0x22E0,// MESS_BOT_R_CPLD I2C Master OSFP Port128
-    0x2500,// MESS_BOT_R_CPLD I2C Master SFP Port1
-    0x2520,// MESS_BOT_R_CPLD I2C Master SFP Port2
-};
-
-#define PCIE_SPI_MUX_OFFSET 0x2f00
-static phys_addr_t pcie_bar0_phys_addr = 0;
-static void __iomem *spi_mux_virt_base= NULL;
 /*
  * 'process_lock' exists because ocores_process() and ocores_process_timeout()
  * can't run in parallel.
@@ -229,7 +60,6 @@ struct ocores_i2c {
     int bus_clock_khz;
     void (*setreg)(struct ocores_i2c *i2c, int reg, u8 value);
     u8 (*getreg)(struct ocores_i2c *i2c, int reg);
-    u8 cached_pdev_id;
 };
 
 /* registers */
@@ -579,29 +409,12 @@ static void ocores_process_polling(struct ocores_i2c *i2c)
     }
 }
 
-// spinlock_t pcie_mux_lock;
-static DEFINE_MUTEX(pcie_mux_lock);
-static volatile int last_id = -1;
 static int ocores_xfer_core(struct ocores_i2c *i2c,
                             struct i2c_msg *msgs, int num,
                             bool polling)
 {
     int ret;
     u8 ctrl;
-    
-    if (i2c->cached_pdev_id >= ARRAY_SIZE(arr_spi_mux)) {
-        return -EINVAL;
-    }
-
-    mutex_lock(&pcie_mux_lock);
-    
-    if (last_id != i2c->cached_pdev_id)
-    {
-        INFO("switch mux to %u i2c->cached_pdev_id =%u \n", arr_spi_mux[i2c->cached_pdev_id], i2c->cached_pdev_id);
-        iowrite8(arr_spi_mux[i2c->cached_pdev_id], spi_mux_virt_base);
-        last_id = i2c->cached_pdev_id;
-        (void)ioread8(spi_mux_virt_base);
-    }
 
     ctrl = oc_getreg(i2c, OCI2C_CONTROL);
     if (polling)
@@ -620,21 +433,16 @@ static int ocores_xfer_core(struct ocores_i2c *i2c,
     if (polling) {
         ocores_process_polling(i2c);
     } else {
-        INFO("going to wait_event_timeout");
         ret = wait_event_timeout(i2c->wait,
                                  (i2c->state == STATE_ERROR) ||
                                  (i2c->state == STATE_DONE), HZ);
         if (ret == 0) {
             ocores_process_timeout(i2c);
-            mutex_unlock(&pcie_mux_lock);
             return -ETIMEDOUT;
         }
     }
-    ret = (i2c->state == STATE_DONE) ? num : -EIO;
 
-    mutex_unlock(&pcie_mux_lock);
-
-    return ret;
+    return (i2c->state == STATE_DONE) ? num : -EIO;
 }
 
 static int ocores_xfer_polling(struct i2c_adapter *adap,
@@ -669,9 +477,6 @@ static int ocores_init(struct device *dev, struct ocores_i2c *i2c)
                 i2c->ip_clock_khz, i2c->bus_clock_khz);
         return -EINVAL;
     }
-
-    oc_setreg(i2c, OCI2C_PRELOW, prescale & 0xff);
-    oc_setreg(i2c, OCI2C_PREHIGH, prescale >> 8);
 
     /* Init the device */
     oc_setreg(i2c, OCI2C_CMD, OCI2C_CMD_IACK);
@@ -876,42 +681,6 @@ static int ocores_i2c_probe(struct platform_device *pdev)
     if (res) {
         i2c->base = ocores_devm_ioremap(&pdev->dev, res);
         dev_info(&pdev->dev, "Resouce start:0x%llx, end:0x%llx", res->start, res->end);
-        dev_info(&pdev->dev,"dev id=%u \n", pdev->id);
-
-        i2c->cached_pdev_id = pdev->id;
-        
-        mutex_lock(&pcie_mux_lock);
-
-        if (spi_mux_virt_base == NULL)
-        {
-            if (i2c->cached_pdev_id >= 0 && i2c->cached_pdev_id < ARRAY_SIZE(arr_pcie_offset)) 
-            {
-                pcie_bar0_phys_addr = res->start - arr_pcie_offset[i2c->cached_pdev_id];
-                spi_mux_virt_base = ioremap(pcie_bar0_phys_addr + PCIE_SPI_MUX_OFFSET, 4);
-                if (!spi_mux_virt_base) 
-                {
-                    mutex_unlock(&pcie_mux_lock);
-                    printk(KERN_ERR "ioremap failed\n");
-                    return -ENOMEM;
-                }
-                last_id = -1;
-                pr_info("Device %d: BAR0=0x%08llx, offset=0x%08x, mapped=0x%08llx,spi_mux_virt_base=0x%p\n",
-                      i2c->cached_pdev_id,
-                      pcie_bar0_phys_addr,
-                      arr_pcie_offset[i2c->cached_pdev_id],
-                      res->start,
-                      spi_mux_virt_base);
-            }
-        }
-        
-        if (spi_mux_virt_base != NULL) {
-            iowrite8(arr_spi_mux[i2c->cached_pdev_id], spi_mux_virt_base);
-            last_id = i2c->cached_pdev_id;
-            dev_info(&pdev->dev,"switch mux to %d \n", arr_spi_mux[i2c->cached_pdev_id]);
-            (void)ioread8(spi_mux_virt_base);
-        }
-        mutex_unlock(&pcie_mux_lock);
-
         if (IS_ERR(i2c->base))
             return PTR_ERR(i2c->base);
     } else {
@@ -1056,11 +825,6 @@ static int ocores_i2c_resume(struct device *dev)
 {
     struct ocores_i2c *i2c = dev_get_drvdata(dev);
 
-    pr_info("ocores_i2c_resume\n");
-    mutex_lock(&pcie_mux_lock);
-    last_id = -1;
-    mutex_unlock(&pcie_mux_lock);
-
     if (!IS_ERR(i2c->clk)) {
         unsigned long rate;
         int ret = clk_prepare_enable(i2c->clk);
@@ -1107,10 +871,7 @@ static int __init ocores_i2c_init(void)
 static void __exit ocores_i2c_exit(void)
 {
     platform_driver_unregister(&ocores_i2c_driver);
-    if (spi_mux_virt_base) {
-        iounmap(spi_mux_virt_base);
-        spi_mux_virt_base= NULL;
-    }
+
 }
 
 module_init(ocores_i2c_init);

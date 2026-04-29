@@ -7,7 +7,7 @@
  * Based on:
  *	sys_mux.c  Brandon Chuang <brandon_chuang@accton.com.tw>
  * Copyright (C) 2025
- #
+ *
  * Based on:
  *	pca954x.c from Kumar Gala <galak@kernel.crashing.org>
  * Copyright (C) 2006
@@ -47,10 +47,10 @@
 #define SYS_MUX_DESELECT_VAL 0x0
 
 enum mux_type {
-	mux_fpga,
-	mux_sys_cpld,
+	mux_cb,
+	mux_mb,
 	mux_fcm,
-	mux_mezz
+	mux_db
 };
 
 struct chip_desc {
@@ -70,13 +70,13 @@ struct sys_mux_data {
 };
 
 static const struct chip_desc chips[] = {
-	[mux_fpga] = {
+	[mux_cb] = {
 			   .nchans = 14,
 			   .select_reg = SYS_MUX_SELECT_REG,
 			   .deselect_val = SYS_MUX_DESELECT_VAL,
 			   .muxtype = is_mux
 	},
-	[mux_sys_cpld] = {
+	[mux_mb] = {
 			   .nchans = 15,
 			   .select_reg = SYS_MUX_SELECT_REG,
 			   .deselect_val = SYS_MUX_DESELECT_VAL,
@@ -88,7 +88,7 @@ static const struct chip_desc chips[] = {
 			   .deselect_val = SYS_MUX_DESELECT_VAL,
 			   .muxtype = isswi
 	},
-	[mux_mezz] = {
+	[mux_db] = {
 			   .nchans = 3,
 			   .select_reg = SYS_MUX_SELECT_REG,
 			   .deselect_val = SYS_MUX_DESELECT_VAL,
@@ -97,20 +97,20 @@ static const struct chip_desc chips[] = {
 };
 
 static const struct i2c_device_id sys_mux_id[] = {
-	{"mux_fpga", mux_fpga},
-	{"mux_sys_cpld", mux_sys_cpld},
+	{"mux_cb", mux_cb},
+	{"mux_mb", mux_mb},
 	{"mux_fcm", mux_fcm},
-	{"mux_mezz", mux_mezz},
+	{"mux_db", mux_db},
 	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, sys_mux_id);
 
 static const struct of_device_id sys_mux_of_match[] = {
-	{.compatible = "mux_fpga",.data = &chips[mux_fpga]},
-	{.compatible = "mux_sys_cpld",.data = &chips[mux_sys_cpld]},
+	{.compatible = "mux_cb",.data = &chips[mux_cb]},
+	{.compatible = "mux_mb",.data = &chips[mux_mb]},
 	{.compatible = "mux_fcm",.data = &chips[mux_fcm]},
-	{.compatible = "mux_mezz",.data = &chips[mux_mezz]},
+	{.compatible = "mux_db",.data = &chips[mux_db]},
 	{}
 };
 
@@ -136,9 +136,9 @@ static int sys_mux_select_chan(struct i2c_mux_core *muxc, u32 chan)
 	int ret = 0;
 	mutex_lock(&data->update_lock);
 	switch (data->type) {
-	case mux_fpga:
-	case mux_sys_cpld:
-	case mux_mezz:
+	case mux_cb:
+	case mux_mb:
+	case mux_db:
 		ret = sys_mux_write(muxc->parent, client,
 					  chips[data->type].select_reg,
 					  chan + 1);
@@ -185,7 +185,7 @@ static int sys_mux_probe(struct i2c_client *client)
 	int ret = -ENODEV;
 	int i = 0;
 
-	if (!i2c_check_functionality(adap, I2C_FUNC_SMBUS_BYTE))
+	if (!i2c_check_functionality(adap, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -ENODEV;
 
 	muxc = i2c_mux_alloc(adap, dev, SYS_MUX_NCHANS, sizeof(*data), 0,
@@ -223,7 +223,6 @@ static void sys_mux_remove(struct i2c_client *client)
 static struct i2c_driver sys_mux_driver = {
 	.driver = {
 		   .name = DRVNAME,
-		   .owner = THIS_MODULE,
 		   .of_match_table = sys_mux_of_match,
 		   },
 	.probe = sys_mux_probe,
