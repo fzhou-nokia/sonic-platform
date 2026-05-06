@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CONFIG_FILE="/etc/sonic/bmc_config.json"
+CONFIG_FILE="/etc/sonic/bmc.json"
 
 check_jq() {
     if ! command -v jq &> /dev/null; then
@@ -12,7 +12,7 @@ check_jq() {
 
 check_jq
 
-if [ ! -f "$CONFIG_FILE" ]; then
+if [ -z "$CONFIG_FILE" ]; then
     logger -t bmc-network "Error: Configuration file not found at $CONFIG_FILE"
     echo "Error: Configuration file not found at $CONFIG_FILE" >&2
     exit 1
@@ -43,9 +43,11 @@ if [ "$BMC_IF_NAME" != "usb0" ]; then
             echo "Error: Failed to rename 'usb0' to '$BMC_IF_NAME'." >&2
             exit 1
         fi
+    elif ip link show "$BMC_IF_NAME" &> /dev/null; then
+        echo "Interface '$BMC_IF_NAME' already exists. Skipping rename." >&2
     else
-        logger -t bmc-network "Warning: Interface 'usb0' not found. Skipping rename."
-        echo "Warning: Interface 'usb0' not found. Skipping rename." >&2
+        logger -t bmc-network "Error: Neither 'usb0' nor '$BMC_IF_NAME' found. Cannot configure BMC network."
+        echo "Error: Neither 'usb0' nor '$BMC_IF_NAME' found. Cannot configure BMC network." >&2
         exit 1
     fi
 else

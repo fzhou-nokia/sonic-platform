@@ -5,10 +5,13 @@
 
 chmod a+x /usr/local/bin/h6_128_platform_init.sh
 chmod a+x /usr/local/bin/bmc_network_init.sh
+systemctl daemon-reload || true
 systemctl enable h6_128_platform_init.service
 systemctl start h6_128_platform_init.service
+# Bind service activation to usb0 device unit; avoid eager start at package install.
 systemctl enable bmc_network_init.service
-systemctl start bmc_network_init.service
+udevadm control --reload-rules || true
+udevadm trigger --subsystem-match=net || true
 chmod a+x /usr/local/bin/ports_notify.py
 systemctl enable ports_notify.service
 systemctl start --no-block ports_notify.service

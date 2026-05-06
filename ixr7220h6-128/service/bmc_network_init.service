@@ -1,12 +1,12 @@
 [Unit]
 Description=Nokia BMC Network Service
 Documentation=https://github.com/sonic-net/SONiC/wiki/
-After=systemd-modules-load.service local-fs.target
+After=systemd-modules-load.service local-fs.target sys-subsystem-net-devices-usb0.device
+BindsTo=sys-subsystem-net-devices-usb0.device
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/bmc_network_init.sh
-RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sys-subsystem-net-devices-usb0.device
