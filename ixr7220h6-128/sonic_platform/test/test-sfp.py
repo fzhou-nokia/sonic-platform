@@ -14,7 +14,7 @@ def main():
     chassis = Chassis()
 
     PORT_START = 1
-    PORT_END = 66
+    PORT_END = 129
 
     for physical_port in range(PORT_START, PORT_START + PORT_END):
 

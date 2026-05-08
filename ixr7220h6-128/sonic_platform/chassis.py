@@ -23,7 +23,7 @@ except ImportError as e:
 # Port numbers for SFP List Initialization
 PORT_START = 1
 PORT_NUM = 128
-PORT_END = 130
+PORT_END = 129
 PORT_I2C_START = 2
 MAX_SELECT_DELAY = 10
 
@@ -34,7 +34,7 @@ PSU_NUM = 4
 THERMAL_NUM = 20
 COMPONENT_NUM = 11
 
-CPLD_DIR = "/sys/bus/i2c/devices/134-0071/"
+PLD_DIR = "/sys/bus/i2c/devices/135-0071/"
 SYSFPGA_DIR  = "/sys/bus/i2c/devices/1-0060/"
 
 SYSLOG_IDENTIFIER = "chassis"
@@ -62,7 +62,7 @@ class Chassis(ChassisBase):
             if index <= PORT_NUM:
                 sfp_node = Sfp(index, 'OSFP', port_eeprom_path, port_i2c_map)
             elif index > PORT_NUM and index <= PORT_END:
-                sfp_node = Sfp(index, 'SFP56', port_eeprom_path, port_i2c_map)
+                sfp_node = Sfp(index, 'QSFP28', port_eeprom_path, port_i2c_map)
             self._sfp_list.append(sfp_node)
 
         self.sfp_event_initialized = False
@@ -359,7 +359,6 @@ class Chassis(ChassisBase):
         Returns:
             bool: True if system LED state is set successfully, False if not
         """
-        return False
         color_to_value = {
             'blue': '0x3',
             'green': '0x5',
@@ -375,7 +374,7 @@ class Chassis(ChassisBase):
         if value is None:
             return False
 
-        write_sysfs_file(CPLD_DIR + 'led_sys', value)
+        write_sysfs_file(PLD_DIR + 'led_sys', value)
         return True
 
     def get_status_led(self):
@@ -386,8 +385,7 @@ class Chassis(ChassisBase):
             A string, one of the valid LED color strings which could be vendor
             specified.
         """
-        return 'N/A'
-        result = read_sysfs_file(CPLD_DIR + 'led_sys')
+        result = read_sysfs_file(PLD_DIR + 'led_sys')
         val = int(result, 16)
         if (val & 0x8) == 0x8:
             return self.system_led_supported_color[2]

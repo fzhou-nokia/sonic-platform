@@ -266,22 +266,22 @@ static int psu_read_word(struct i2c_client *client, u8 reg)
     return i2c_smbus_read_word_data(client, reg);
 }
 
-static int psu_write_byte_pec(struct i2c_client *client, u8 reg, \
-								u8 value)
+static int psu_write_byte_pec(struct i2c_client *client, u8 reg, u8 value)
 {
-	union i2c_smbus_data data;
-	data.byte = value;
+    union i2c_smbus_data data;
+
+    data.byte = value;
     return i2c_smbus_xfer(client->adapter, client->addr,
-				client->flags |= I2C_CLIENT_PEC,
-								I2C_SMBUS_WRITE, reg,
-								I2C_SMBUS_BYTE_DATA, &data);
+                          client->flags | I2C_CLIENT_PEC,
+                          I2C_SMBUS_WRITE, reg,
+                          I2C_SMBUS_BYTE_DATA, &data);
 }
 
 static int psu_read_block(struct i2c_client *client, u8 command, u8 *data)
 {
-	int result = i2c_smbus_read_block_data(client, command, data);
-	if (unlikely(result < 0))
-		goto abort;
+    int result = i2c_smbus_read_block_data(client, command, data);
+    if (unlikely(result < 0))
+        goto abort;
 
     result = 0;
 abort:
@@ -393,15 +393,18 @@ static ssize_t set_psu_rst(struct device *dev, struct device_attribute *dev_attr
     const char *str_in = "Reset\n";
     int res = 0;
     
-    if (strcmp(buf, str_in) == 0) {
-        dev_warn(&client->dev, "Reg(0x%02x) written to cycle this PSU\n", PSU_REG_OPERATION);
-        res = psu_write_byte_pec(client, PSU_REG_OPERATION, 0x60);
-        if (res < 0) {
-            dev_warn(&client->dev, "%s WRITE ERROR: reg(0x%02x) err %d\n", PSU_DRIVER_NAME, PSU_REG_OPERATION, res);
-        }
-    }
-    else
+    if (!sysfs_streq(buf, "Reset"))
         return -EINVAL;
+
+    dev_warn(&client->dev, "Reg(0x%02x) written to cycle this PSU\n",
+             PSU_REG_OPERATION);
+
+    res = psu_write_byte_pec(client, PSU_REG_OPERATION, 0x60);
+    if (res < 0) {
+        dev_warn(&client->dev, "%s WRITE ERROR: reg(0x%02x) err %d\n",
+                 PSU_DRIVER_NAME, PSU_REG_OPERATION, res);
+        return res;
+    }
 
     return count;
 }

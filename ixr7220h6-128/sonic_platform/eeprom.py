@@ -16,10 +16,10 @@ try:
 except ImportError as e:
     raise ImportError(str(e) + ' - required module not found') from e
 
-I2C_FAN_EEPROM = ["163-0050", "164-0050",
-                  "165-0050", "166-0050",
-                  "169-0050", "170-0050",
-                  "171-0050", "172-0050"]
+I2C_FAN_EEPROM = ["164-0050", "165-0050",
+                  "166-0050", "167-0050",
+                  "170-0050", "171-0050",
+                  "172-0050", "173-0050"]
 
 sonic_logger = logger.Logger('eeprom')
 
@@ -30,13 +30,13 @@ class Eeprom(TlvInfoDecoder):
     def __init__(self, is_psu, psu_index, is_fan, drawer_index):
         self.is_psu_eeprom = is_psu
         self.is_fan_eeprom = is_fan
-        self.is_sys_eeprom = not (is_psu | is_fan)
+        self.is_sys_eeprom = not (is_psu or is_fan)
         self.service_tag = 'NA'
         self.part_number = 'NA'
 
         if self.is_sys_eeprom:
             self.start_offset = 0
-            self.eeprom_path = self.I2C_DIR + "158-0056/eeprom"
+            self.eeprom_path = self.I2C_DIR + "159-0056/eeprom"
             # System EEPROM is in ONIE TlvInfo EEPROM format
             super(Eeprom, self).__init__(self.eeprom_path, self.start_offset, '', True)
             self.base_mac = ''
@@ -73,7 +73,7 @@ class Eeprom(TlvInfoDecoder):
             # Read System EEPROM as per ONIE TlvInfo EEPROM format.
             self.eeprom_data = self.read_eeprom()
         except Exception as e:
-            sonic_logger.log_warning("Unable to read system eeprom")
+            sonic_logger.log_warning(f"Unable to read system eeprom: {e}")
             self.base_mac = 'NA'
             self.serial_number = 'NA'
             self.part_number = 'NA'
@@ -161,16 +161,6 @@ class Eeprom(TlvInfoDecoder):
 
         return self.part_number
 
-    def airflow_fan_type(self):
-        """
-        Returns the airflow fan type.
-        """
-        if self.is_psu_eeprom:
-            return int(self.psu_type.encode('hex'), 16)
-        if self.is_fan_eeprom:
-            return int(self.fan_type.encode('hex'), 16)
-        return None
-
     # System EEPROM specific methods
     def base_mac_addr(self):
         """
@@ -201,7 +191,7 @@ class Eeprom(TlvInfoDecoder):
     
     def manuf_date_str(self):
         """
-        Returns the servicetag number.
+        Returns the manufacturing date.
         """
         if not self.manuf_date:
             self._load_system_eeprom()

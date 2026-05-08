@@ -98,7 +98,7 @@ class ThermalInfo(ThermalPolicyInfoBase):
         for index in range(num_of_thermals):
             self._temps.insert(index, chassis.get_thermal(index).get_temperature())
 
-       # Find current required threshold level
+        # Find current required threshold level
         max_level =0
         min_level = [self._num_fan_levels for i in range(num_of_thermals)]
         for index in range(num_of_thermals):
@@ -112,18 +112,18 @@ class ThermalInfo(ThermalPolicyInfoBase):
 
         max_of_min_level=max(min_level)
 
-        #compare with running threshold level
+        # Compare with running threshold level
         if max_of_min_level > self._old_threshold_level:
             max_of_min_level=self._old_threshold_level
 
         self._current_threshold_level = max(max_of_min_level,max_level)
 
-        #set fan to max speed if one fan is down
+        # Set fan to max speed if one fan is down
         for fan in chassis.get_all_fans():
             if not fan.get_status() :
                 self._current_threshold_level = 3
 
-       # Decide fan speed based on threshold level
+        # Decide fan speed based on threshold level
         if self._current_threshold_level != self._old_threshold_level:
             if self._current_threshold_level == 0:
                 self._set_fan_default_speed = True

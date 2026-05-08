@@ -6,7 +6,7 @@ Before=database.service determine-reboot-cause.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/h6_128_platform_init.sh
-StandardOutput=tty
+StandardOutput=journal+console
 
 [Install]
 WantedBy=multi-user.target

@@ -20,7 +20,7 @@ FAN_TOLERANCE = 50
 WORKING_FAN_SPEED = 2000
 
 HWMON_DIR = "/sys/bus/i2c/devices/{}/hwmon/hwmon*/"
-I2C_DEV_LIST = ["144-0032", "145-0033"]
+I2C_DEV_LIST = ["145-0032", "146-0033"]
                
 FAN_INDEX_IN_DRAWER = [(1, 2),
                        (1, 2),

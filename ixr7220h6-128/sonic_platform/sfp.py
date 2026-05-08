@@ -19,15 +19,15 @@ except ImportError as e:
 PORT_NUM = 128
 
 SYSFS_DIR = "/sys/bus/i2c/devices/{}/"
-PORTPLD_ADDR = ["152-0076", "153-0076", "148-0074", "149-0075", "150-0073", "151-0073"]
+PORTPLD_ADDR = ["153-0076", "154-0076", "149-0074", "150-0075", "151-0073", "152-0073"]
 ADDR_IDX = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
             2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
             2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-            4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,3,3]
+            4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,3]
 PORT_IDX = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
             1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30,1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30,
             3,4,7,8,11,12,15,16,19,20,23,24,27,28,31,32,3,4,7,8,11,12,15,16,19,20,23,24,27,28,31,32,
-            1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,33,34]
+            1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,33]
 
 SYSLOG_IDENTIFIER = "sfp"
 sonic_logger = logger.Logger(SYSLOG_IDENTIFIER)
@@ -144,11 +144,10 @@ class Sfp(SfpOptoeBase):
         Returns:
             A Boolean, True if reset enabled, False if disabled
         """
-        if self.index <= PORT_NUM:
-            result = read_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_rst")
-            if result == '0':
-                return True
-            return False
+        result = read_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_rst")
+        if result == '0':
+            return True
+
         return False
 
     def get_status(self):
@@ -172,7 +171,7 @@ class Sfp(SfpOptoeBase):
         if not self.get_presence():
             sys.stderr.write(f"Error: Port {self.index} not inserted, could not reset it.\n\n")
             return False
-        sonic_logger.log_info(f"Reseting port #{self.index}.")
+        sonic_logger.log_info(f"Resetting port #{self.index}.")
 
         result1 = 'ERR'
         result2 = 'ERR'
@@ -197,11 +196,10 @@ class Sfp(SfpOptoeBase):
         """
         result = 'ERR'
 
-        if self.index <= PORT_NUM:
-            if lpmode:
-                result = write_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod", '0')
-            else:
-                result = write_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod", '1')
+        if lpmode:
+            result = write_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod", '0')
+        else:
+            result = write_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod", '1')
 
         if result != 'ERR':
             return True
@@ -216,8 +214,7 @@ class Sfp(SfpOptoeBase):
         """
         result = 'ERR'
 
-        if self.index <= PORT_NUM:
-            result = read_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod")
+        result = read_sysfs_file(self.pld_path+f"port_{self.pld_port_idx}_lpmod")
 
         if result == '0':
             return True

@@ -1,4 +1,6 @@
 try:
+    import os
+    import time
     from sonic_platform_base.sonic_thermal_control.thermal_action_base import ThermalPolicyActionBase
     from sonic_platform_base.sonic_thermal_control.thermal_json_object import thermal_json_object
     from sonic_py_common import logger
@@ -163,27 +165,29 @@ class SwitchPolicyAction(ThermalPolicyActionBase):
         :return:
         """
         try:
-            import os
-            from sonic_platform.chassis import Chassis
+            from .thermal_infos import ChassisInfo
+            chassis = thermal_info_dict[ChassisInfo.INFO_NAME].get_chassis()
             for i in range(8):
-                fan_obj = Chassis().get_fan_drawer(i)
+                fan_obj = chassis.get_fan_drawer(i)
                 if fan_obj.get_presence():
                     sonic_logger.log_warning(f"Fan {fan_obj.get_name()} speed: "
                                              f"{fan_obj.get_fan(0).get_speed()}%, {fan_obj.get_fan(1).get_speed()}%.")
                 else:
-                    sonic_logger.log_warning(f"Fan {fan_obj.get_name()} not presence.")
+                    sonic_logger.log_warning(f"Fan {fan_obj.get_name()} not present.")
             for i in range(4):
-                psu_obj = Chassis().get_psu(i)
+                psu_obj = chassis.get_psu(i)
                 if psu_obj.get_presence():
                     sonic_logger.log_warning(f"{psu_obj.get_name()}: {psu_obj.get_voltage()}V, "
                                              f"{psu_obj.get_current()}A, {psu_obj.get_power()}W.")
                 else:
-                    sonic_logger.log_warning(f"{fan_obj.get_name()} not presence.")
+                    sonic_logger.log_warning(f"{psu_obj.get_name()} not present.")
         except Exception as e:
-            sonic_logger.log_warning(" Fail to save fan and psu info {}".format(repr(e)))
+            sonic_logger.log_warning(f"Failed to save fan and psu info: {e!r}")
         
         sonic_logger.log_error("Alarm for temperature critical is detected, reboot Device")
-        os.system('reboot')
+        os.system('sync')
+        time.sleep(1)
+        os.system('echo b > /proc/sysrq-trigger')
 
 @thermal_json_object('thermal_control.control')
 class ControlThermalAlgoAction(ThermalPolicyActionBase):
@@ -213,7 +217,7 @@ class ControlThermalAlgoAction(ThermalPolicyActionBase):
             elif status_str == 'false':
                 self.status = False
             else:
-                raise ValueError('Invalid {} field value, please specify true of false'.
+                raise ValueError('Invalid {} field value, please specify true or false'.
                                  format(ControlThermalAlgoAction.JSON_FIELD_STATUS))
         else:
             raise ValueError('ControlThermalAlgoAction '
