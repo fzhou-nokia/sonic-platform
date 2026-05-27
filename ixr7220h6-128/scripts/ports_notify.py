@@ -7,7 +7,7 @@
 try:
     from swsscommon import swsscommon
     from sonic_py_common import daemon_base, logger
-    from sonic_platform.sysfs import write_sysfs_file
+    from sonic_platform.sysfs import write_sysfs_file, read_sysfs_file
 except ImportError as e:
     raise ImportError (str(e) + " - required module not found")
 
@@ -15,7 +15,7 @@ SYSLOG_IDENTIFIER = "ports_notify"
 
 SELECT_TIMEOUT_MSECS = 1000
 
-PORT_END = 128
+PORT_END = 129
 SYSFS_DIR = "/sys/bus/i2c/devices/{}/"
 PORTPLD_ADDR = ["153-0076", "154-0076", "149-0074", "150-0075", "151-0073", "152-0073"]
 ADDR_IDX = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -29,6 +29,7 @@ PORT_IDX = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1,2,3,4,5,6,7,8,9,10,11,12,13
 
 # Global logger class instance
 sonic_logger = logger.Logger(SYSLOG_IDENTIFIER)
+# sonic_logger.set_min_log_priority_info()
 
 def wait_for_port_init_done():
     # Connect to APPL_DB and subscribe to PORT table notifications
@@ -56,7 +57,7 @@ def subscribe_port_config_change():
     sel = swsscommon.Select()
     config_db = daemon_base.db_connect("CONFIG_DB")
     port_tbl = swsscommon.SubscriberStateTable(config_db, swsscommon.CFG_PORT_TABLE_NAME)
-    port_tbl.filter = ['admin_status']
+    port_tbl.filter = ['admin_status', 'speed']
     sel.addSelectable(port_tbl)
     return sel, port_tbl
 
@@ -81,24 +82,46 @@ def handle_port_config_change(sel, port_config, logger):
         if fvp is not None:
             fvp = dict(fvp)
 
-            if 'admin_status' in fvp:
-                if 'index' in fvp:
-                    port_index = int(fvp['index'])
-                    if port_index in range(1, PORT_END+1):
-                        pld_path = SYSFS_DIR.format(PORTPLD_ADDR[ADDR_IDX[port_index-1]])
-                        pld_port_idx = PORT_IDX[port_index-1]
-                        file_name = pld_path + f"port_{pld_port_idx}_en"
-                    else:
-                        logger.log_warning(f"Wrong port index {port_index} for port {port_name}")
-                        continue
+            if 'index' in fvp:
+                port_index = int(fvp['index'])
+                if port_index in range(1, PORT_END+1):
+                    pld_path = SYSFS_DIR.format(PORTPLD_ADDR[ADDR_IDX[port_index-1]])
+                    pld_port_idx = PORT_IDX[port_index-1]
+                    admin_file_name = pld_path + f"port_{pld_port_idx}_en"
+                    brkt_file_name = pld_path + f"port_{pld_port_idx}_brkt"
                 else:
-                    logger.log_warning(f"Wrong index from port {port_name}: {fvp}")
+                    logger.log_warning(f"Wrong port index {port_index} for port {port_name}")
                     continue
+            else:
+                logger.log_warning(f"Wrong index from port {port_name}: {fvp}")
+                continue
 
-                if fvp['admin_status'] == 'up':
-                    write_sysfs_file(file_name, '1')
-                elif fvp['admin_status'] == 'down':
-                    write_sysfs_file(file_name, '0')
+            if 'admin_status' in fvp:
+                if 'speed' in fvp and fvp['speed'] in ('100000', '200000', '400000', '800000'):
+                    if 'subport' in fvp and fvp['subport'] == '0':
+                        if fvp['admin_status'] == 'up':
+                            write_sysfs_file(admin_file_name, '0xff')
+                        elif fvp['admin_status'] == 'down':
+                            write_sysfs_file(admin_file_name, '0x0')
+                    else:
+                        speed = int(fvp['speed'])
+                        mask = 0xff >> ((800000 - speed)//100000)
+                        subport = int(fvp['subport'])
+                        reg_mask = (~(mask << ((subport - 1) * (speed//100000)))) & 0xFF
+                        reg_val = int(read_sysfs_file(admin_file_name), 16)
+                        reg_val = reg_val & reg_mask
+                        admin = {'up': 1, 'down': 0}[fvp['admin_status']]
+                        set_bits = mask if admin else 0
+                        result = reg_val | (set_bits << ((subport - 1) * (speed//100000)))
+                        write_sysfs_file(admin_file_name, hex(result))
+
+            if 'speed' in fvp:
+                if fvp['speed'] == '800000':
+                    if read_sysfs_file(brkt_file_name) != '0x00':
+                        write_sysfs_file(brkt_file_name, '0x0')
+                elif fvp['speed'] == '400000':
+                    if fvp['subport'] == '1' and read_sysfs_file(brkt_file_name) != '0x11':
+                        write_sysfs_file(brkt_file_name, '0x11')
 
     return 0
 

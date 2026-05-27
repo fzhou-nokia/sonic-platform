@@ -198,7 +198,7 @@ class Chassis(ChassisBase):
         Returns:
             string: Model/part number of chassis
         """
-        return self._eeprom.part_number_str()
+        return self._eeprom.modelstr()
 
     def get_serial(self):
         """
@@ -285,8 +285,6 @@ class Chassis(ChassisBase):
             is "REBOOT_CAUSE_HARDWARE_OTHER", the second string can be used
             to pass a description of the reboot cause.
         """
-        return (self.REBOOT_CAUSE_NON_HARDWARE, None)
-    
         result = read_sysfs_file(SYSFPGA_DIR + "reset_cause")
 
         if (int(result, 16) & 0x10) >> 4 == 1:
@@ -300,7 +298,7 @@ class Chassis(ChassisBase):
 
         if (int(result, 16) & 0x08) >> 3 == 1:
             return (self.REBOOT_CAUSE_HARDWARE_OTHER, "Power Cycle")
-        
+
         return (self.REBOOT_CAUSE_NON_HARDWARE, None)
 
     def get_watchdog(self):
@@ -393,7 +391,7 @@ class Chassis(ChassisBase):
             return self.system_led_supported_color[1]
         if val == 0x5:
             return self.system_led_supported_color[0]
-        if val == 0x6:
+        if (val & 0x1) == 0x0:
             return self.system_led_supported_color[3]
         if val == 0x7:
             return self.system_led_supported_color[4]

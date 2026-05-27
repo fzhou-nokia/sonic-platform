@@ -10,7 +10,7 @@ load_kernel_drivers() {
     rmmod i2c-piix4
     rmmod i2c_designware_platform
     modprobe igb
-#    modprobe bnxt_en
+    modprobe bnxt_en
     modprobe i2c_designware_platform
 
     modprobe i2c-i801
@@ -128,7 +128,15 @@ for index in {2..129}; do
 	echo optoe3 0x50 > /sys/bus/i2c/devices/i2c-${index}/new_device
 done
 echo optoe1 0x50 > /sys/bus/i2c/devices/i2c-130/new_device
-echo optoe1 0x50 > /sys/bus/i2c/devices/i2c-131/new_device
+
+i2cset -y 132 0x61 0x06 0x18
+i2cset -y 132 0x61 0x0f 0x01
+i2cset -y 132 0x61 0x16 0x01
+i2cset -y 132 0x61 0x11 0x80
+i2cset -y 132 0x61 0x18 0x80
+i2cset -y 132 0x61 0x23 0x00
+i2cset -y 132 0x61 0x2d 0x00
+ip link set eth1 up
 
 for ch in {1..8}; do
     echo 60 > /sys/bus/i2c/devices/145-0032/hwmon/hwmon*/fan${ch}_pwm
