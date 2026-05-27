@@ -35,7 +35,9 @@
 #define PSU_PRESENT_REG                  0x07
 #define SSD_PRESENT_REG                  0x08
 #define MUX_SEL_REG                      0x0F
+#define RESET_REASON_REG                 0x3B
 #define PSU_POWERGOOD_REG                0x51
+#define CONSOLE_WDT_REG                  0x63
 
 static const unsigned short cpld_address_list[] = {0x60, I2C_CLIENT_END};
 
@@ -131,6 +133,48 @@ static ssize_t show_mux_sel(struct device *dev, struct device_attribute *devattr
     return sprintf(buf, "%d\n", (val>>sda->index) & 0x1 ? 1:0);
 }
 
+static ssize_t show_reset_cause(struct device *dev, struct device_attribute *devattr, char *buf)
+{
+    struct cpld_data *data = dev_get_drvdata(dev);
+    return sprintf(buf, "%02x\n", data->reset_cause);
+}
+
+static ssize_t show_console_wdt(struct device *dev, struct device_attribute *devattr, char *buf)
+{
+    struct cpld_data *data = dev_get_drvdata(dev);
+    struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
+    u8 val = 0;
+
+    val = cpld_i2c_read(data, CONSOLE_WDT_REG);
+
+    return sprintf(buf, "%d\n", (val>>sda->index) & 0x1 ? 1:0);
+}
+
+static ssize_t set_console_wdt(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
+{
+    struct cpld_data *data = dev_get_drvdata(dev);
+    struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
+    u8 reg_val = 0;
+    u8 usr_val = 0;
+    u8 mask;
+
+    int ret = kstrtou8(buf, 10, &usr_val);
+    if (ret != 0) {
+        return ret;
+    }
+    if (usr_val > 1) {
+        return -EINVAL;
+    }
+
+    mask = (~(1 << sda->index)) & 0xFF;
+    reg_val = cpld_i2c_read(data, CONSOLE_WDT_REG);
+    reg_val = reg_val & mask;
+    usr_val = usr_val << sda->index;
+    cpld_i2c_write(data, CONSOLE_WDT_REG, (reg_val | usr_val));
+
+    return count;
+}
+
 // sysfs attributes
 static SENSOR_DEVICE_ATTR(hw_board_version, S_IRUGO, show_hw_board_ver, NULL, 0);
 static SENSOR_DEVICE_ATTR(version, S_IRUGO, show_ver, NULL, 0);
@@ -145,6 +189,8 @@ static SENSOR_DEVICE_ATTR(psu4_pres, S_IRUGO, show_psu_present, NULL, 0);
 static SENSOR_DEVICE_ATTR(ssd1_pres, S_IRUGO, show_ssd_present, NULL, 1);
 static SENSOR_DEVICE_ATTR(ssd2_pres, S_IRUGO, show_ssd_present, NULL, 0);
 static SENSOR_DEVICE_ATTR(mux_sel, S_IRUGO, show_mux_sel, NULL, 0);
+static SENSOR_DEVICE_ATTR(reset_cause, S_IRUGO, show_reset_cause, NULL, 0);
+static SENSOR_DEVICE_ATTR(console_wdt, S_IRUGO | S_IWUSR, show_console_wdt, set_console_wdt, 0);
 
 static struct attribute *cb_pld_attributes[] = {
     &sensor_dev_attr_hw_board_version.dev_attr.attr,
@@ -160,6 +206,8 @@ static struct attribute *cb_pld_attributes[] = {
     &sensor_dev_attr_ssd1_pres.dev_attr.attr,
     &sensor_dev_attr_ssd2_pres.dev_attr.attr,
     &sensor_dev_attr_mux_sel.dev_attr.attr,
+    &sensor_dev_attr_reset_cause.dev_attr.attr,
+    &sensor_dev_attr_console_wdt.dev_attr.attr,
     NULL
 };
 
@@ -196,6 +244,9 @@ static int cb_pld_probe(struct i2c_client *client)
         dev_err(&client->dev, "CPLD INIT ERROR: Cannot create sysfs\n");
         goto exit_sysfs_create_group;
     }
+
+    data->reset_cause = cpld_i2c_read(data, RESET_REASON_REG);
+    cpld_i2c_write(data, RESET_REASON_REG, 0xFF);
 
     return 0;
 

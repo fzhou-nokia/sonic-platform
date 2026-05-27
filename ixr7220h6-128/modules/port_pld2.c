@@ -27,11 +27,13 @@
 #include <linux/delay.h>
 
 #define DRIVER_NAME "port_pld2"
+#define PORT_NUM 16
 
 // REGISTERS ADDRESS MAP
 #define VER_MAJOR_REG           0x00
 #define VER_MINOR_REG           0x01
 #define SCRATCH_REG             0x04
+#define PORT_BRKT_REG0          0x30
 #define PORT_LPMODE_REG0        0x70
 #define PORT_EFUSE_REG0         0x72
 #define PORT_RST_REG0           0x78
@@ -45,6 +47,7 @@ struct cpld_data {
     struct i2c_client *client;
     struct mutex  update_lock;
     int port_efuse;
+    u8 port_en[PORT_NUM];
 };
 
 static int cpld_i2c_read(struct cpld_data *data, u8 reg)
@@ -54,7 +57,8 @@ static int cpld_i2c_read(struct cpld_data *data, u8 reg)
 
     val = i2c_smbus_read_byte_data(client, reg);
     if (val < 0) {
-         dev_warn(&client->dev, "CPLD READ ERROR: reg(0x%02x) err %d\n", reg, val);
+        dev_warn_ratelimited(&client->dev,
+                              "CPLD READ ERROR: reg(0x%02x) err %d\n", reg, val);
     }
 
     return val;
@@ -65,12 +69,11 @@ static void cpld_i2c_write(struct cpld_data *data, u8 reg, u8 value)
     int res = 0;
     struct i2c_client *client = data->client;
 
-    mutex_lock(&data->update_lock);
     res = i2c_smbus_write_byte_data(client, reg, value);
     if (res < 0) {
-        dev_warn(&client->dev, "CPLD WRITE ERROR: reg(0x%02x) err %d\n", reg, res);
+        dev_warn_ratelimited(&client->dev,
+                             "CPLD WRITE ERROR: reg(0x%02x) err %d\n", reg, res);
     }
-    mutex_unlock(&data->update_lock);
 }
 
 static void dump_reg(struct cpld_data *data)
@@ -124,9 +127,6 @@ static ssize_t set_scratch(struct device *dev, struct device_attribute *devattr,
     if (ret != 0) {
         return ret;
     }
-    if (usr_val > 0xFF) {
-        return -EINVAL;
-    }
 
     cpld_i2c_write(data, SCRATCH_REG, usr_val);
 
@@ -151,6 +151,7 @@ static ssize_t set_port_lpmode(struct device *dev, struct device_attribute *deva
     u8 reg_val = 0;
     u8 usr_val = 0;
     u8 mask;
+    int raw;
 
     int ret = kstrtou8(buf, 10, &usr_val);
     if (ret != 0) {
@@ -161,10 +162,17 @@ static ssize_t set_port_lpmode(struct device *dev, struct device_attribute *deva
     }
 
     mask = (~(1 << (sda->index % 8))) & 0xFF;
-    reg_val = cpld_i2c_read(data, PORT_LPMODE_REG0 + (sda->index / 8));
-    reg_val = reg_val & mask;
     usr_val = usr_val << (sda->index % 8);
+
+    mutex_lock(&data->update_lock);
+    raw = cpld_i2c_read(data, PORT_LPMODE_REG0 + (sda->index / 8));
+    if (raw < 0) {
+        mutex_unlock(&data->update_lock);
+        return raw;
+    }
+    reg_val = (u8)raw & mask;
     cpld_i2c_write(data, PORT_LPMODE_REG0 + (sda->index / 8), (reg_val | usr_val));
+    mutex_unlock(&data->update_lock);
 
     return count;
 }
@@ -187,6 +195,7 @@ static ssize_t set_port_rst(struct device *dev, struct device_attribute *devattr
     u8 reg_val = 0;
     u8 usr_val = 0;
     u8 mask;
+    int raw;
 
     int ret = kstrtou8(buf, 10, &usr_val);
     if (ret != 0) {
@@ -197,10 +206,17 @@ static ssize_t set_port_rst(struct device *dev, struct device_attribute *devattr
     }
 
     mask = (~(1 << (sda->index % 8))) & 0xFF;
-    reg_val = cpld_i2c_read(data, PORT_RST_REG0 + (sda->index / 8));
-    reg_val = reg_val & mask;
     usr_val = usr_val << (sda->index % 8);
+
+    mutex_lock(&data->update_lock);
+    raw = cpld_i2c_read(data, PORT_RST_REG0 + (sda->index / 8));
+    if (raw < 0) {
+        mutex_unlock(&data->update_lock);
+        return raw;
+    }
+    reg_val = (u8)raw & mask;
     cpld_i2c_write(data, PORT_RST_REG0 + (sda->index / 8), (reg_val | usr_val));
+    mutex_unlock(&data->update_lock);
 
     return count;
 }
@@ -223,14 +239,14 @@ static ssize_t show_modprs_reg(struct device *dev, struct device_attribute *deva
     u8 val = 0;
 
     val = cpld_i2c_read(data, PORT_MODPRS_REG0 + sda->index);
-    
+
     return sprintf(buf, "0x%02x\n", val);
 }
 
 static ssize_t show_port_efuse(struct device *dev, struct device_attribute *devattr, char *buf)
 {
     struct cpld_data *data = dev_get_drvdata(dev);
-    
+
     return sprintf(buf, "%s\n", (data->port_efuse) ? "Enabled":"Disabled");
 }
 
@@ -239,19 +255,24 @@ static ssize_t set_port_efuse(struct device *dev, struct device_attribute *devat
     struct cpld_data *data = dev_get_drvdata(dev);
     const char *str_en = "Enable\n";
     const char *str_dis = "Disable\n";
-    
+    u8 reg_val = 0xFF;
+    u8 efuse_val = 1;
+
     if (strcmp(buf, str_en) == 0) {
-        cpld_i2c_write(data, PORT_EFUSE_REG0, 0xFF);
-        cpld_i2c_write(data, PORT_EFUSE_REG0+1, 0xFF);
-        data->port_efuse = 1;
+        reg_val = 0xFF;
+        efuse_val = 1;
     }
     else if (strcmp(buf, str_dis) == 0) {
-        cpld_i2c_write(data, PORT_EFUSE_REG0, 0x0);
-        cpld_i2c_write(data, PORT_EFUSE_REG0+1, 0x0);
-        data->port_efuse = 0;
+        reg_val = 0;
+        efuse_val = 0;
     }
     else
         return -EINVAL;
+    mutex_lock(&data->update_lock);
+    cpld_i2c_write(data, PORT_EFUSE_REG0, reg_val);
+    cpld_i2c_write(data, PORT_EFUSE_REG0+1, reg_val);
+    data->port_efuse = efuse_val;
+    mutex_unlock(&data->update_lock);
 
     return count;
 }
@@ -260,11 +281,8 @@ static ssize_t show_port_en(struct device *dev, struct device_attribute *devattr
 {
     struct cpld_data *data = dev_get_drvdata(dev);
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
-    u8 val = 0;
 
-    val = cpld_i2c_read(data, PORT_ENABLE_REG0 + (sda->index / 8));
-
-    return sprintf(buf, "%d\n", (val>>(sda->index % 8)) & 0x1 ? 1:0);
+    return sprintf(buf, "0x%02x\n", data->port_en[sda->index]);
 }
 
 static ssize_t set_port_en(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
@@ -273,21 +291,56 @@ static ssize_t set_port_en(struct device *dev, struct device_attribute *devattr,
     struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
     u8 reg_val = 0;
     u8 usr_val = 0;
+    u8 out_val = 0;
     u8 mask;
+    int raw;
 
-    int ret = kstrtou8(buf, 10, &usr_val);
+    int ret = kstrtou8(buf, 16, &usr_val);
     if (ret != 0) {
         return ret;
     }
-    if (usr_val > 1) {
-        return -EINVAL;
-    }
 
     mask = (~(1 << (sda->index % 8))) & 0xFF;
-    reg_val = cpld_i2c_read(data, PORT_ENABLE_REG0 + (sda->index / 8));
-    reg_val = reg_val & mask;
-    usr_val = usr_val << (sda->index % 8);
-    cpld_i2c_write(data, PORT_ENABLE_REG0 + (sda->index / 8), (reg_val | usr_val));
+    if (usr_val != 0) out_val = 1;
+    out_val = out_val << (sda->index % 8);
+
+    mutex_lock(&data->update_lock);
+    data->port_en[sda->index] = usr_val;
+    raw = cpld_i2c_read(data, PORT_ENABLE_REG0 + (sda->index / 8));
+    if (raw < 0) {
+        mutex_unlock(&data->update_lock);
+        return raw;
+    }
+    reg_val = (u8)raw & mask;
+    cpld_i2c_write(data, PORT_ENABLE_REG0 + (sda->index / 8), (reg_val | out_val));
+    mutex_unlock(&data->update_lock);
+
+    return count;
+}
+
+static ssize_t show_port_brkt(struct device *dev, struct device_attribute *devattr, char *buf)
+{
+    struct cpld_data *data = dev_get_drvdata(dev);
+    struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
+    u8 val = 0;
+
+    val = cpld_i2c_read(data, PORT_BRKT_REG0+sda->index);
+
+    return sprintf(buf, "0x%02x\n", val);
+}
+
+static ssize_t set_port_brkt(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
+{
+    struct cpld_data *data = dev_get_drvdata(dev);
+    struct sensor_device_attribute *sda = to_sensor_dev_attr(devattr);
+    u8 usr_val = 0;
+
+    int ret = kstrtou8(buf, 16, &usr_val);
+    if (ret != 0) {
+        return ret;
+    }
+
+    cpld_i2c_write(data, PORT_BRKT_REG0+sda->index, usr_val);
 
     return count;
 }
@@ -369,6 +422,23 @@ static SENSOR_DEVICE_ATTR(port_16_en, S_IRUGO | S_IWUSR, show_port_en, set_port_
 
 static SENSOR_DEVICE_ATTR(port_efuse, S_IRUGO | S_IWUSR, show_port_efuse, set_port_efuse, 0);
 
+static SENSOR_DEVICE_ATTR(port_1_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 0);
+static SENSOR_DEVICE_ATTR(port_2_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 1);
+static SENSOR_DEVICE_ATTR(port_3_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 2);
+static SENSOR_DEVICE_ATTR(port_4_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 3);
+static SENSOR_DEVICE_ATTR(port_5_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 4);
+static SENSOR_DEVICE_ATTR(port_6_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 5);
+static SENSOR_DEVICE_ATTR(port_7_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 6);
+static SENSOR_DEVICE_ATTR(port_8_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 7);
+static SENSOR_DEVICE_ATTR(port_9_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 8);
+static SENSOR_DEVICE_ATTR(port_10_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 9);
+static SENSOR_DEVICE_ATTR(port_11_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 10);
+static SENSOR_DEVICE_ATTR(port_12_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 11);
+static SENSOR_DEVICE_ATTR(port_13_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 12);
+static SENSOR_DEVICE_ATTR(port_14_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 13);
+static SENSOR_DEVICE_ATTR(port_15_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 14);
+static SENSOR_DEVICE_ATTR(port_16_brkt, S_IRUGO | S_IWUSR, show_port_brkt, set_port_brkt, 15);
+
 static struct attribute *port_pld2_attributes[] = {
     &sensor_dev_attr_version.dev_attr.attr,
     &sensor_dev_attr_scratch.dev_attr.attr,
@@ -446,6 +516,23 @@ static struct attribute *port_pld2_attributes[] = {
 
     &sensor_dev_attr_port_efuse.dev_attr.attr,
 
+    &sensor_dev_attr_port_1_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_2_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_3_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_4_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_5_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_6_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_7_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_8_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_9_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_10_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_11_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_12_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_13_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_14_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_15_brkt.dev_attr.attr,
+    &sensor_dev_attr_port_16_brkt.dev_attr.attr,
+
     NULL
 };
 
@@ -482,7 +569,7 @@ static int port_pld2_probe(struct i2c_client *client)
         dev_err(&client->dev, "CPLD INIT ERROR: Cannot create sysfs\n");
         goto exit_sysfs_create_group;
     }
-    
+
     dump_reg(data);
     cpld_i2c_write(data, PORT_EFUSE_REG0, 0xFF);
     cpld_i2c_write(data, PORT_EFUSE_REG0+1, 0xFF);
@@ -496,7 +583,10 @@ static int port_pld2_probe(struct i2c_client *client)
     cpld_i2c_write(data, PORT_RST_REG0+1, 0xFF);
     dev_info(&client->dev, "[PORT_PLD2]PORTs reset done.\n");
     dump_reg(data);
-    
+    cpld_i2c_write(data, PORT_ENABLE_REG0, 0x0);
+    cpld_i2c_write(data, PORT_ENABLE_REG0+1, 0x0);
+    data->port_efuse = 1;
+
     return 0;
 
 exit_sysfs_create_group:
