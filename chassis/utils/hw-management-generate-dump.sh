@@ -314,7 +314,11 @@ save_ndk_midplane_info() {
         save_tar_cmd "nokia_cmd show midplane mac-table"      "${NDK_MIDPLANE}"
         save_tar_cmd "nokia_cmd show midplane link-status-flap" "${NDK_MIDPLANE}"
         save_tar_cmd "sudo ethtool xe0"    "${NDK_MIDPLANE}"
-        save_tar_cmd "sudo ethtool mgmt1"  "${NDK_MIDPLANE}" true
+        save_tar_cmd "sudo ethtool -S xe0" "${NDK_MIDPLANE}"        
+        save_tar_cmd "sudo ethtool mgmt1"  "${NDK_MIDPLANE}"
+        save_tar_cmd "sudo ethtool -S mgmt1" "${NDK_MIDPLANE}"
+        save_tar_cmd "sudo ethtool ethMgmt"   "${NDK_MIDPLANE}"
+        save_tar_cmd "sudo ethtool -S ethMgmt" "${NDK_MIDPLANE}" true
     fi
 }
 save_ndk_sfm_info() {
@@ -335,7 +339,7 @@ save_ndk_sfp_info() {
 save_ndk_kernel_intf_info() {
     echo "Capture Kernel Intfs"
     NDK_INTFS=ndk.interfaces.txt
-    save_tar_cmd "ip link show" "${NDK_INTFS}" true
+    save_tar_cmd "ip -s link show" "${NDK_INTFS}" true
 }
 save_ndk_pcon_info() {
     # local timeout_cmd="timeout --foreground ${TIMEOUT_MIN}m"
