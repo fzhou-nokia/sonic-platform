@@ -1,3 +1,2 @@
-SUBSYSTEM=="net", ACTION=="add", KERNEL=="usb0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bmc_network_init.service"
-SUBSYSTEM=="net", ACTION=="change", KERNEL=="usb0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bmc_network_init.service"
-SUBSYSTEM=="net", ACTION=="change", KERNEL=="bmc0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bmc_network_init.service"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="02:00:00:00:00:02", NAME="bmc0"
+SUBSYSTEM=="net", ACTION=="move", KERNEL=="bmc0", ATTR{address}=="02:00:00:00:00:02", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ifup@bmc0.service"
