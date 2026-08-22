@@ -4,13 +4,18 @@
 # see: dh_installdeb(1)
 
 chmod a+x /usr/local/bin/h6_128_platform_init.sh
-chmod a+x /usr/local/bin/bmc_network_init.sh
 systemctl daemon-reload || true
 systemctl enable h6_128_platform_init.service
 systemctl start h6_128_platform_init.service
-# Bind service activation to usb0 device unit; avoid eager start at package install.
-systemctl enable bmc_network_init.service
 udevadm control --reload-rules || true
+# Rename on first deb installation if usb0 is already created
+# before udev rule is copied
+if [ -d /sys/class/net/usb0 ] && [ ! -d /sys/class/net/bmc0 ]; then
+    mac=$(cat /sys/class/net/usb0/address 2>/dev/null || true)
+    if [ "$mac" = "02:00:00:00:00:02" ]; then
+        ip link set usb0 name bmc0 || true
+    fi
+fi
 udevadm trigger --subsystem-match=net || true
 chmod a+x /usr/local/bin/ports_notify.py
 systemctl enable ports_notify.service
