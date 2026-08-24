@@ -297,7 +297,7 @@ class Chassis(ChassisBase):
         if val1 & 0x02:
             return (self.REBOOT_CAUSE_HARDWARE_OTHER, "CPU Over Heat")
         if val2 == 0x5A:
-            return (self.REBOOT_CAUSE_POWER_LOSS, "BMC Remote Power Cycle")
+            return (self.REBOOT_CAUSE_POWER_DOWN_REQUEST_FROM_BMC, None)
         if val1 & 0x08:
             return (self.REBOOT_CAUSE_POWER_LOSS, "Power Cycle")
         return (self.REBOOT_CAUSE_NON_HARDWARE, None)
